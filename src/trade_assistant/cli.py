@@ -7,7 +7,13 @@ from rich.console import Console
 from rich.table import Table
 
 from trade_assistant import __version__
-from trade_assistant.bbs import BBSSetup, evaluate_bbs
+from trade_assistant.bbs import (
+    BBSSetup,
+    entry_from_last_high,
+    evaluate_bbs,
+    gain_per_share_from_target,
+    stop_from_last_low,
+)
 from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
 
 # Typer flattens a *single* subcommand into the root CLI (SYMBOL becomes the first
@@ -30,13 +36,20 @@ def _parse_decimal(value: str) -> Decimal:
 @app.command("bbs-eval")
 def bbs_eval(
     symbol: str = typer.Argument(..., help="Ticker / symbol"),
-    entry: str = typer.Option(..., "--entry", help="Entry price"),
-    stop: str = typer.Option(..., "--stop", help="Initial stop loss (below entry)"),
-    qty: int = typer.Option(..., "--qty", help="Number of shares"),
-    gain: str = typer.Option(
+    high: str = typer.Option(
         ...,
-        "--gain",
-        help="Potential gain G per share (e.g. target_price - entry)",
+        "--high",
+        help="Last candle high (max of the candle you are using)",
+    ),
+    low: str = typer.Option(
+        ...,
+        "--low",
+        help="Last candle low (min of the candle you are using)",
+    ),
+    target: str = typer.Option(
+        ...,
+        "--target",
+        help="Target level (price); G per share = target − high",
     ),
     earnings_soon: bool = typer.Option(
         False,
@@ -61,11 +74,36 @@ def bbs_eval(
         help="Earnings window: flag if next earnings is within this many weeks (default 3)",
     ),
 ) -> None:
-    """Evaluate a Basic Buy Setup (long)."""
-    entry_d = _parse_decimal(entry)
-    stop_d = _parse_decimal(stop)
-    gain_d = _parse_decimal(gain)
+    """Evaluate a Basic Buy Setup (long).
+
+    Entry and stop are derived from the last candle: entry = high + high×0.005,
+    stop = low − low×0.005. G per share = target − high.
+    """
+    high_d = _parse_decimal(high)
+    low_d = _parse_decimal(low)
+    target_d = _parse_decimal(target)
     account_d: Decimal | None = _parse_decimal(account) if account is not None else None
+
+    if low_d > high_d:
+        console.print("[red]Error:[/red] --low must be ≤ --high (last candle min ≤ max).")
+        raise typer.Exit(2)
+
+    entry_d = entry_from_last_high(high_d)
+    stop_d = stop_from_last_low(low_d)
+    gain_d = gain_per_share_from_target(target_d, high_d)
+
+    if stop_d >= entry_d:
+        console.print(
+            "[red]Error:[/red] Derived stop must be below derived entry. "
+            "Check --high / --low (wider spread or invalid candle)."
+        )
+        raise typer.Exit(2)
+
+    if gain_d <= 0:
+        console.print(
+            "[red]Error:[/red] G = target − high must be > 0 (target above last candle high)."
+        )
+        raise typer.Exit(2)
 
     horizon_days = weeks * 7
 
@@ -124,6 +162,12 @@ def bbs_eval(
 
     console.print(f"\n[bold]{result.symbol}[/bold] — {result.summary}\n")
     m = Table(show_header=False, box=None)
+    m.add_row("Last candle high", f"{high_d}")
+    m.add_row("Last candle low", f"{low_d}")
+    m.add_row("Target", f"{target_d}")
+    m.add_row("Derived entry (high + high×0.005)", f"{entry_d}")
+    m.add_row("Derived stop (low − low×0.005)", f"{stop_d}")
+    m.add_row("Derived G (target − high)", f"{gain_d}")
     m.add_row("G/R", f"{result.gr_ratio:.4f}")
     m.add_row("R (per share)", f"{result.r_per_share}")
     m.add_row("G (per share)", f"{result.g_per_share}")
