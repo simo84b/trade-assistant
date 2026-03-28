@@ -6,20 +6,34 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from trade_assistant import __version__
 from trade_assistant.bbs import BBSSetup, evaluate_bbs
 from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
 
+# Typer flattens a *single* subcommand into the root CLI (SYMBOL becomes the first
+# positional). A second command keeps `bbs-eval` as a real subcommand.
 app = typer.Typer(help="Paper-trading assistant (BBS and more).")
 console = Console()
+
+
+@app.command("version")
+def version_cmd() -> None:
+    """Print the package version."""
+    typer.echo(__version__)
+
+
+def _parse_decimal(value: str) -> Decimal:
+    """Parse CLI number; accepts 12.16 or 12,16."""
+    return Decimal(value.strip().replace(",", "."))
 
 
 @app.command("bbs-eval")
 def bbs_eval(
     symbol: str = typer.Argument(..., help="Ticker / symbol"),
-    entry: Decimal = typer.Option(..., "--entry", help="Entry price"),
-    stop: Decimal = typer.Option(..., "--stop", help="Initial stop loss (below entry)"),
+    entry: str = typer.Option(..., "--entry", help="Entry price"),
+    stop: str = typer.Option(..., "--stop", help="Initial stop loss (below entry)"),
     qty: int = typer.Option(..., "--qty", help="Number of shares"),
-    gain: Decimal = typer.Option(
+    gain: str = typer.Option(
         ...,
         "--gain",
         help="Potential gain G per share (e.g. target_price - entry)",
@@ -29,7 +43,7 @@ def bbs_eval(
         "--earnings-soon",
         help="Manual flag: earnings (or similar) imminent; discourages trade",
     ),
-    account: Decimal | None = typer.Option(
+    account: str | None = typer.Option(
         None,
         "--account",
         help="Optional total account equity for account risk %%",
@@ -48,6 +62,11 @@ def bbs_eval(
     ),
 ) -> None:
     """Evaluate a Basic Buy Setup (long)."""
+    entry_d = _parse_decimal(entry)
+    stop_d = _parse_decimal(stop)
+    gain_d = _parse_decimal(gain)
+    account_d: Decimal | None = _parse_decimal(account) if account is not None else None
+
     horizon_days = weeks * 7
 
     auto: EarningsCheckResult | None = None
@@ -90,12 +109,12 @@ def bbs_eval(
 
     setup = BBSSetup(
         symbol=symbol,
-        entry_price=entry,
-        stop_loss=stop,
+        entry_price=entry_d,
+        stop_loss=stop_d,
         quantity=qty,
-        potential_gain=gain,
+        potential_gain=gain_d,
         earnings_communication_imminent=imminent,
-        account_equity=account,
+        account_equity=account_d,
     )
     result = evaluate_bbs(
         setup,
