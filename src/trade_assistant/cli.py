@@ -49,7 +49,13 @@ def bbs_eval(
     target: str = typer.Option(
         ...,
         "--target",
-        help="Target level (price); G per share = target − high",
+        help="Target level (price); G per share = target - high",
+    ),
+    qty: int = typer.Option(
+        ...,
+        "--qty",
+        help="Number of shares",
+        min=1,
     ),
     earnings_soon: bool = typer.Option(
         False,
@@ -76,8 +82,8 @@ def bbs_eval(
 ) -> None:
     """Evaluate a Basic Buy Setup (long).
 
-    Entry and stop are derived from the last candle: entry = high + high×0.005,
-    stop = low − low×0.005. G per share = target − high.
+    Entry and stop are derived from the last candle: entry = high + high*0.005,
+    stop = low - low*0.005. G per share = target - high.
     """
     high_d = _parse_decimal(high)
     low_d = _parse_decimal(low)
@@ -85,7 +91,7 @@ def bbs_eval(
     account_d: Decimal | None = _parse_decimal(account) if account is not None else None
 
     if low_d > high_d:
-        console.print("[red]Error:[/red] --low must be ≤ --high (last candle min ≤ max).")
+        console.print("[red]Error:[/red] --low must be <= --high (last candle min <= max).")
         raise typer.Exit(2)
 
     entry_d = entry_from_last_high(high_d)
@@ -101,7 +107,7 @@ def bbs_eval(
 
     if gain_d <= 0:
         console.print(
-            "[red]Error:[/red] G = target − high must be > 0 (target above last candle high)."
+            "[red]Error:[/red] G = target - high must be > 0 (target above last candle high)."
         )
         raise typer.Exit(2)
 
@@ -165,9 +171,9 @@ def bbs_eval(
     m.add_row("Last candle high", f"{high_d}")
     m.add_row("Last candle low", f"{low_d}")
     m.add_row("Target", f"{target_d}")
-    m.add_row("Derived entry (high + high×0.005)", f"{entry_d}")
-    m.add_row("Derived stop (low − low×0.005)", f"{stop_d}")
-    m.add_row("Derived G (target − high)", f"{gain_d}")
+    m.add_row("Derived entry (high + high*0.005)", f"{entry_d}")
+    m.add_row("Derived stop (low - low*0.005)", f"{stop_d}")
+    m.add_row("Derived G (target - high)", f"{gain_d}")
     m.add_row("G/R", f"{result.gr_ratio:.4f}")
     m.add_row("R (per share)", f"{result.r_per_share}")
     m.add_row("G (per share)", f"{result.g_per_share}")
