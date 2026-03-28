@@ -15,6 +15,7 @@ from trade_assistant.bbs import (
     stop_from_last_low,
 )
 from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
+from trade_assistant.sizing import optimal_quantity
 
 # Typer flattens a *single* subcommand into the root CLI (SYMBOL becomes the first
 # positional). A second command keeps `bbs-eval` as a real subcommand.
@@ -51,21 +52,32 @@ def bbs_eval(
         "--target",
         help="Target level (price); G per share = target - high",
     ),
-    qty: int = typer.Option(
+    account: str = typer.Option(
         ...,
-        "--qty",
-        help="Number of shares",
+        "--account",
+        help="Total capital available for trading (same currency as prices)",
+    ),
+    max_loss: str = typer.Option(
+        ...,
+        "--max-loss",
+        help="Max $ loss per single operation for this strategy (absolute)",
+    ),
+    strategy: str = typer.Option(
+        "core",
+        "--strategy",
+        help="Strategy label (e.g. core, swing); used for future presets; sizing uses --max-loss",
+    ),
+    slots: int | None = typer.Option(
+        None,
+        "--slots",
         min=1,
+        max=20,
+        help="Override concurrent-operation count (default: tiered from --account)",
     ),
     earnings_soon: bool = typer.Option(
         False,
         "--earnings-soon",
         help="Manual flag: earnings (or similar) imminent; discourages trade",
-    ),
-    account: str | None = typer.Option(
-        None,
-        "--account",
-        help="Optional total account equity for account risk %%",
     ),
     no_auto_earnings: bool = typer.Option(
         False,
@@ -84,11 +96,15 @@ def bbs_eval(
 
     Entry and stop are derived from the last candle: entry = high + high*0.005,
     stop = low - low*0.005. G per share = target - high.
+
+    Share count is computed from --account, tiered concurrent operations, and --max-loss:
+    qty = min(floor(capital_per_op / entry), floor(max_loss / R_per_share)).
     """
     high_d = _parse_decimal(high)
     low_d = _parse_decimal(low)
     target_d = _parse_decimal(target)
-    account_d: Decimal | None = _parse_decimal(account) if account is not None else None
+    account_d = _parse_decimal(account)
+    max_loss_d = _parse_decimal(max_loss)
 
     if low_d > high_d:
         console.print("[red]Error:[/red] --low must be <= --high (last candle min <= max).")
@@ -108,6 +124,27 @@ def bbs_eval(
     if gain_d <= 0:
         console.print(
             "[red]Error:[/red] G = target - high must be > 0 (target above last candle high)."
+        )
+        raise typer.Exit(2)
+
+    r_per_share = entry_d - stop_d
+    try:
+        qty, num_ops, capital_per_op, q_cap, q_risk = optimal_quantity(
+            account_d,
+            entry_d,
+            r_per_share,
+            max_loss_d,
+            num_concurrent_ops=slots,
+        )
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(2) from exc
+
+    if qty < 1:
+        console.print(
+            "[red]Error:[/red] Computed quantity is 0. "
+            "Raise --account / --max-loss, lower entry (wider capital slice), "
+            "or use --slots to change concurrent-operation count."
         )
         raise typer.Exit(2)
 
@@ -168,6 +205,14 @@ def bbs_eval(
 
     console.print(f"\n[bold]{result.symbol}[/bold] — {result.summary}\n")
     m = Table(show_header=False, box=None)
+    m.add_row("Account", f"{account_d}")
+    m.add_row("Strategy", strategy)
+    m.add_row("Concurrent operations", str(num_ops))
+    m.add_row("Capital per operation", f"{capital_per_op}")
+    m.add_row("Max loss / operation", f"{max_loss_d}")
+    m.add_row("Shares (cap floor)", str(q_cap))
+    m.add_row("Shares (risk floor)", str(q_risk))
+    m.add_row("Shares (chosen qty)", str(qty))
     m.add_row("Last candle high", f"{high_d}")
     m.add_row("Last candle low", f"{low_d}")
     m.add_row("Target", f"{target_d}")
