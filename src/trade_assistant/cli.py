@@ -15,11 +15,13 @@ from trade_assistant.bbs import (
     stop_from_last_low,
 )
 from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
+from trade_assistant.journal.commands import journal_app
 from trade_assistant.sizing import optimal_quantity
 
 # Typer flattens a *single* subcommand into the root CLI (SYMBOL becomes the first
 # positional). A second command keeps `bbs-eval` as a real subcommand.
 app = typer.Typer(help="Paper-trading assistant (BBS and more).")
+app.add_typer(journal_app, name="journal")
 console = Console()
 
 

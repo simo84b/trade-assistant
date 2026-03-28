@@ -43,6 +43,29 @@ trade-assistant bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --account 1
 
 Exit code **0** if the setup passes all BBS gates, **1** otherwise. Add `--earnings-soon` (manual), `--no-auto-earnings`, `--weeks 3`, or `--slots 4` as needed.
 
+## Core trading journal
+
+SQLite journal for **open** and **closed** trades (append-only **history** per trade: open, stop updates, notes, close). Default database: **`~/.trade-assistant/trades.db`**, or set **`TRADE_ASSISTANT_DB`**, or pass **`journal --db path/to/file.db`** on each command.
+
+| Command | Purpose |
+|--------|---------|
+| `journal add` | New open position (`--entry`, `--stop`, `--qty`, optional `--target`, `--strategy`, `--technique`, `--notes`) |
+| `journal open` | List open trades |
+| `journal list` | Recent trades (`--open` / `--closed` / default all; `--symbol`) |
+| `journal show ID` | Trade + event timeline |
+| `journal close ID --exit PRICE` | Close (`--pnl` optional; else long P/L = (exit − entry) × qty) |
+| `journal log ID "text"` | Add a note to history |
+| `journal update-stop ID --stop PRICE` | Move stop (logged) |
+
+Examples:
+
+```bash
+trade-assistant journal add VLY --entry 12.16 --stop 11.39 --qty 350 --target 14.0 --technique bbs
+trade-assistant journal open
+trade-assistant journal show 1
+trade-assistant journal close 1 --exit 13.50
+```
+
 ## Private Git repository
 
 Create the repo on your host (GitHub, etc.), then:
