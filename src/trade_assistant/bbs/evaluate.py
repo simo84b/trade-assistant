@@ -5,13 +5,12 @@ from decimal import Decimal
 from trade_assistant.bbs.models import BBSEvaluation, BBSSetup, RuleStatus
 
 
-def _d(x: Decimal | int | float) -> Decimal:
-    if isinstance(x, Decimal):
-        return x
-    return Decimal(str(x))
-
-
-def evaluate_bbs(setup: BBSSetup) -> BBSEvaluation:
+def evaluate_bbs(
+    setup: BBSSetup,
+    *,
+    earnings_detail_fail: str | None = None,
+    earnings_detail_ok: str | None = None,
+) -> BBSEvaluation:
     """
     Evaluate a Basic Buy Setup (long).
 
@@ -116,22 +115,32 @@ def evaluate_bbs(setup: BBSSetup) -> BBSEvaluation:
 
     # Earnings
     if setup.earnings_communication_imminent:
+        detail = (
+            earnings_detail_fail
+            if earnings_detail_fail
+            else "Imminent earnings or similar — trade discouraged"
+        )
         rules.append(
             RuleStatus(
                 rule_id="earnings",
                 passed=False,
                 label="Earnings / communication",
-                detail="Imminent earnings or similar — trade discouraged",
+                detail=detail,
                 severity="fail",
             )
         )
     else:
+        ok_detail = (
+            earnings_detail_ok
+            if earnings_detail_ok
+            else "No earnings flag set"
+        )
         rules.append(
             RuleStatus(
                 rule_id="earnings",
                 passed=True,
                 label="Earnings / communication",
-                detail="No earnings flag set",
+                detail=ok_detail,
                 severity="ok",
             )
         )

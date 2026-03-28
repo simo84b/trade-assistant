@@ -12,6 +12,8 @@ dependencies = [
     "pydantic>=2.5",
     "typer>=0.9",
     "rich>=13.7",
+    "yfinance>=0.2.40",
+    "lxml>=5.0",
 ]
 
 [project.optional-dependencies]
