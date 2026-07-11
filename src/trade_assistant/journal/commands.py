@@ -177,6 +177,35 @@ def journal_log(
         repo.close()
 
 
+@journal_app.command("delete")
+def journal_delete(
+    ctx: typer.Context,
+    trade_id: int = typer.Argument(..., help="Trade id"),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Also allow deleting closed trades (removes history permanently)",
+    ),
+) -> None:
+    """Remove a trade and its history (for correcting mistakes)."""
+    repo = _repo(ctx)
+    try:
+        t = repo.get_trade(trade_id)
+        if not t:
+            console.print(f"[red]No trade #{trade_id}[/red]")
+            raise typer.Exit(1)
+        if t.status == "closed" and not force:
+            console.print(
+                f"[red]Trade #{trade_id} is closed.[/red] "
+                "Use [bold]--force[/bold] to delete it anyway."
+            )
+            raise typer.Exit(1)
+        repo.delete_trade(trade_id)
+        console.print(f"[green]Trade #{trade_id} deleted.[/green]")
+    finally:
+        repo.close()
+
+
 @journal_app.command("update-stop")
 def journal_update_stop(
     ctx: typer.Context,

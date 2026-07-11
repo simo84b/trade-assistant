@@ -56,6 +56,7 @@ SQLite journal for **open** and **closed** trades (append-only **history** per t
 | `journal close ID --exit PRICE` | Close (`--pnl` optional; else long P/L = (exit − entry) × qty) |
 | `journal log ID "text"` | Add a note to history |
 | `journal update-stop ID --stop PRICE` | Move stop (logged) |
+| `journal delete ID` | Remove trade and history (`--force` for closed trades) |
 
 Examples:
 

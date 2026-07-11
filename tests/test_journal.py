@@ -31,6 +31,26 @@ def test_add_list_close(tmp_path: Path) -> None:
         repo.close()
 
 
+def test_delete_trade(tmp_path: Path) -> None:
+    db = tmp_path / "j.db"
+    repo = JournalRepository(db)
+    try:
+        tid = repo.add_trade(
+            TradeCreate(
+                symbol="Y",
+                quantity=5,
+                entry_price=Decimal("20"),
+                stop_loss=Decimal("18"),
+            )
+        )
+        assert repo.list_events(tid)
+        repo.delete_trade(tid)
+        assert repo.get_trade(tid) is None
+        assert repo.list_events(tid) == []
+    finally:
+        repo.close()
+
+
 def test_update_stop_and_events(tmp_path: Path) -> None:
     db = tmp_path / "j.db"
     repo = JournalRepository(db)

@@ -117,6 +117,11 @@ class JournalRepository:
             f"exit {exit_price} pnl {realized_pnl}",
         )
 
+    def delete_trade(self, trade_id: int) -> None:
+        cur = self._conn.execute("DELETE FROM trades WHERE id = ?", (trade_id,))
+        if cur.rowcount == 0:
+            raise LookupError("trade not found")
+
     def get_trade(self, trade_id: int) -> Trade | None:
         row = self._conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
         if not row:
