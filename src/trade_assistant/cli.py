@@ -15,6 +15,7 @@ from trade_assistant.bbs import (
     stop_from_last_low,
 )
 from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
+from trade_assistant.market_data import YahooCompanyProfile, fetch_yahoo_company_profile
 from trade_assistant.journal.commands import journal_app
 from trade_assistant.sizing import optimal_quantity
 
@@ -86,6 +87,11 @@ def bbs_eval(
         "--no-auto-earnings",
         help="Do not query Yahoo for the next earnings date",
     ),
+    no_auto_profile: bool = typer.Option(
+        False,
+        "--no-auto-profile",
+        help="Do not query Yahoo Finance for company sector / industry",
+    ),
     weeks: int = typer.Option(
         3,
         "--weeks",
@@ -152,6 +158,15 @@ def bbs_eval(
 
     horizon_days = weeks * 7
 
+    profile: YahooCompanyProfile | None = None
+    if not no_auto_profile:
+        profile = fetch_yahoo_company_profile(symbol)
+        if not profile.fetched_ok and profile.error:
+            console.print(
+                f"[yellow]Warning:[/yellow] Could not fetch Yahoo company profile for "
+                f"{symbol!r}: {profile.error}. Use --no-auto-profile to skip."
+            )
+
     auto: EarningsCheckResult | None = None
     if not no_auto_earnings:
         auto = check_upcoming_earnings(symbol, horizon_days=horizon_days)
@@ -207,6 +222,16 @@ def bbs_eval(
 
     console.print(f"\n[bold]{result.symbol}[/bold] — {result.summary}\n")
     m = Table(show_header=False, box=None)
+    if profile is not None:
+        if profile.fetched_ok and profile.sector:
+            sector_line = profile.sector
+            if profile.industry:
+                sector_line = f"{profile.sector} — {profile.industry}"
+            m.add_row("Sector (Yahoo)", sector_line)
+        elif profile.fetched_ok:
+            m.add_row("Sector (Yahoo)", "— (not listed)")
+        else:
+            m.add_row("Sector (Yahoo)", "— (unavailable)")
     m.add_row("Account", f"{account_d}")
     m.add_row("Strategy", strategy)
     m.add_row("Concurrent operations", str(num_ops))
