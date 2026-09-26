@@ -80,7 +80,7 @@ def evaluate_bbs(
                 severity="fail",
             )
         )
-    elif position_risk_pct > Decimal("6.5") or position_risk_pct < Decimal("5"):
+    elif position_risk_pct > Decimal("6.5"):
         rules.append(
             RuleStatus(
                 rule_id="position_risk_pct",
