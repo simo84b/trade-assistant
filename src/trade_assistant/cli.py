@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 import typer
 from rich.console import Console
@@ -14,7 +15,11 @@ from trade_assistant.bbs import (
     gain_per_share_from_target,
     stop_from_last_low,
 )
-from trade_assistant.earnings import EarningsCheckResult, check_upcoming_earnings
+from trade_assistant.earnings import (
+    EarningsCheckResult,
+    check_upcoming_earnings,
+    dividend_calendar_rule_text,
+)
 from trade_assistant.market_data import YahooCompanyProfile, fetch_yahoo_company_profile
 from trade_assistant.journal.commands import journal_app
 from trade_assistant.sizing import optimal_quantity
@@ -97,7 +102,7 @@ def bbs_eval(
         "--weeks",
         min=1,
         max=52,
-        help="Earnings window: flag if next earnings is within this many weeks (default 3)",
+        help="Calendar window: earnings fail if within N weeks; ex-div/dividend dates warn (default 3)",
     ),
 ) -> None:
     """Evaluate a Basic Buy Setup (long).
@@ -176,7 +181,6 @@ def bbs_eval(
                 f"{symbol!r}: {auto.error}. "
                 "Use --no-auto-earnings to skip, or --earnings-soon to flag manually."
             )
-
     imminent = earnings_soon
     if auto is not None and auto.fetched_ok:
         imminent = imminent or auto.is_within_horizon
@@ -205,6 +209,14 @@ def bbs_eval(
         else:
             ok_detail = "No upcoming earnings date listed on Yahoo for this symbol"
 
+    dividend_detail: str | None = None
+    dividend_severity: Literal["ok", "warn"] = "ok"
+    if auto is not None and auto.fetched_ok:
+        dividend_detail, dividend_severity = dividend_calendar_rule_text(
+            auto,
+            weeks=weeks,
+        )
+
     setup = BBSSetup(
         symbol=symbol,
         entry_price=entry_d,
@@ -218,6 +230,8 @@ def bbs_eval(
         setup,
         earnings_detail_fail=fail_detail,
         earnings_detail_ok=ok_detail,
+        dividend_calendar_detail=dividend_detail,
+        dividend_calendar_severity=dividend_severity,
     )
 
     console.print(f"\n[bold]{result.symbol}[/bold] — {result.summary}\n")

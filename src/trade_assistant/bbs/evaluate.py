@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from trade_assistant.bbs.models import BBSEvaluation, BBSSetup, RuleStatus
 
@@ -10,6 +11,8 @@ def evaluate_bbs(
     *,
     earnings_detail_fail: str | None = None,
     earnings_detail_ok: str | None = None,
+    dividend_calendar_detail: str | None = None,
+    dividend_calendar_severity: Literal["ok", "warn"] = "ok",
 ) -> BBSEvaluation:
     """
     Evaluate a Basic Buy Setup (long).
@@ -142,6 +145,17 @@ def evaluate_bbs(
                 label="Earnings / communication",
                 detail=ok_detail,
                 severity="ok",
+            )
+        )
+
+    if dividend_calendar_detail is not None:
+        rules.append(
+            RuleStatus(
+                rule_id="dividend_calendar",
+                passed=True,
+                label="Ex-dividend / dividend",
+                detail=dividend_calendar_detail,
+                severity=dividend_calendar_severity,
             )
         )
 

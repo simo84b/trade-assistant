@@ -52,6 +52,27 @@ def test_gr_fails_below_1_5() -> None:
     assert out.ok_to_trade is False
 
 
+def test_dividend_calendar_rule_in_rules_table() -> None:
+    setup = BBSSetup(
+        symbol="X",
+        entry_price=Decimal("10"),
+        stop_loss=Decimal("9.5"),
+        quantity=100,
+        potential_gain=Decimal("3"),
+        earnings_communication_imminent=False,
+    )
+    out = evaluate_bbs(
+        setup,
+        dividend_calendar_detail="Ex-dividend on 2026-04-05 (Yahoo): example.",
+        dividend_calendar_severity="warn",
+    )
+    div = next(r for r in out.rules if r.rule_id == "dividend_calendar")
+    assert div.passed is True
+    assert div.severity == "warn"
+    assert out.ok_to_trade is True
+    assert "warnings" in out.summary
+
+
 def test_earnings_blocks() -> None:
     setup = BBSSetup(
         symbol="X",
