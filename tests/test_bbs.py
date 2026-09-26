@@ -23,6 +23,22 @@ def test_valley_national_example_metrics() -> None:
     assert abs(out.position_risk_pct - Decimal("6.332236842105263157894736842")) < Decimal("0.01")
 
 
+def test_position_risk_below_ideal_band_is_ok() -> None:
+    """Tighter stop → lower position risk %; still passes with ok severity."""
+    setup = BBSSetup(
+        symbol="X",
+        entry_price=Decimal("10"),
+        stop_loss=Decimal("9.6"),  # 4% position risk
+        quantity=100,
+        potential_gain=Decimal("5"),  # G/R = 12.5
+        earnings_communication_imminent=False,
+    )
+    out = evaluate_bbs(setup)
+    pr = next(r for r in out.rules if r.rule_id == "position_risk_pct")
+    assert pr.passed is True
+    assert pr.severity == "ok"
+
+
 def test_gr_fails_below_1_5() -> None:
     setup = BBSSetup(
         symbol="X",

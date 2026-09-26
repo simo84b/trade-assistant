@@ -22,7 +22,7 @@ pip install -e ".[dev]"
 Internally, evaluation still uses **entry**, **stop**, and **G** as before: \(R = \text{entry} - \text{stop}\) per share.
 
 1. **G/R** — Require **G/R > 1.5**; **> 2.5** is treated as ideal (otherwise a warning).
-2. **Position risk %** — Share count cancels: **(entry − stop) / entry × 100** (risk as a fraction of entry / position). Must be **< 10%**; about **5–6%** is ideal (values outside that band pass but may warn).
+2. **Position risk %** — Share count cancels: **(entry − stop) / entry × 100** (risk as a fraction of entry / position). Must be **< 10%**; about **5–6%** is ideal (values above ~6.5% but below 10% pass with a warning; lower risk % is fine).
 3. **Earnings** — If you mark **earnings (or similar) as imminent**, the setup is **discouraged** (fails the check). By default the CLI also queries **Yahoo Finance** (via [yfinance](https://github.com/ranaroussi/yfinance)) for the **next earnings date** and treats the setup as discouraged if that date falls within the next **3 weeks** (21 days). This mirrors the data shown on the [Yahoo earnings calendar](https://finance.yahoo.com/calendar/earnings); it can be missing or wrong, so treat it as advisory. Use `--no-auto-earnings` to skip the lookup, or `--weeks N` to change the window.
 
 **Sizing** — You pass **`--account`** (total capital) and **`--max-loss`** (max loss per single operation, absolute $, strategy-specific in spirit). The tool picks a **concurrent-operation count** from the account tier (ambiguous ranges use the higher slot count so each slice is smaller), then:
