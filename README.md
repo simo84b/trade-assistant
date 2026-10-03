@@ -4,12 +4,20 @@ Standalone Python helper for paper trading (e.g. ProRealTime): evaluate setups a
 
 ## Setup
 
+If `pip` is available:
 ```bash
 cd trade-assistant
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
+
+If `pip.exe` is blocked by Device Guard or your organization, use the Python wrapper instead:
+```bash
+python trade-assistant.py --help
+```
+
+No installation is required — just ensure all dependencies from `pyproject.toml` are available in your Python environment.
 
 ## BBS rules (implemented)
 
@@ -40,6 +48,11 @@ Override the slot count with **`--slots`** if you want 3 vs 4 (or 6 vs 10) expli
 Use the `bbs-eval` subcommand (the app also exposes `version` so Typer keeps subcommands explicit):
 
 ```bash
+python trade-assistant.py bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --account 10000 --max-loss 200
+```
+
+Or if installed via `pip`:
+```bash
 trade-assistant bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --account 10000 --max-loss 200
 ```
 
@@ -55,8 +68,16 @@ SQLite journal for **open** and **closed** trades (append-only **history** per t
 | `journal open` | List open trades |
 | `journal list` | Recent trades (`--open` / `--closed` / default all; `--symbol`) |
 | `journal show ID` | Trade + event timeline |
-| `journal close ID --exit PRICE` | Close (`--pnl` optional; else long P/L = (exit − entry) × qty) |
-| `journal log ID "text"` | Add a note to history |
+| `journ (using the Python wrapper):
+
+```bash
+python trade-assistant.py journal add VLY --entry 12.16 --stop 11.39 --qty 350 --target 14.0 --technique bbs
+python trade-assistant.py journal open
+python trade-assistant.py journal show 1
+python trade-assistant.py journal close 1 --exit 13.50
+```
+
+Or if installed via `pip`:| `journal log ID "text"` | Add a note to history |
 | `journal update-stop ID --stop PRICE` | Move stop (logged) |
 | `journal delete ID` | Remove trade and history (`--force` for closed trades) |
 
