@@ -35,11 +35,31 @@ Internally, evaluation still uses **entry**, **stop**, and **G** as before: \(R 
 
 **Company sector** — By default the CLI also loads **sector** (and **industry**, when listed) from the same Yahoo Finance source as earnings ([ticker quote profile](https://finance.yahoo.com/quote/), via `yfinance`). Use `--no-auto-profile` to skip.
 
-**Sizing** — You pass **`--account`** (total capital) and **`--max-loss`** (max loss per single operation, absolute $, strategy-specific in spirit). The tool picks a **concurrent-operation count** from the account tier (ambiguous ranges use the higher slot count so each slice is smaller), then:
+**Sizing** — The `bbs-eval` command reads **account** (total capital) and **max loss** (max loss per single operation, absolute $, strategy-specific in spirit) from your user config by default. You can override either value with **`--account`** or **`--max-loss`** on an individual run. The tool picks a **concurrent-operation count** from the account tier (ambiguous ranges use the higher slot count so each slice is smaller), then:
 
 `qty = min(floor((account / slots) / entry), floor(max_loss / R_per_share))`.
 
-Override the slot count with **`--slots`** if you want 3 vs 4 (or 6 vs 10) explicitly. **`--strategy`** is reserved for labels (e.g. core vs swing); today **`--max-loss`** is always explicit.
+Create `~/.trade-assistant/config.toml` (on Windows, `%USERPROFILE%\.trade-assistant\config.toml`) with your preferred sizing defaults:
+
+```toml
+[bbs_eval]
+account = "10000"
+max_loss = "200"
+```
+
+Or set them from the command line; this creates the config file if needed:
+
+```bash
+trade-assistant config set --account 10000 --max-loss 200
+```
+
+Either option may be updated on its own, preserving the other configured value:
+
+```bash
+trade-assistant config set --max-loss 300
+```
+
+The config is optional when both options are supplied on the command line. Values passed as `--account` or `--max-loss` take precedence over the corresponding config value. If a value is omitted both from the config and command, `bbs-eval` reports which option is missing. Override the slot count with **`--slots`** if you want 3 vs 4 (or 6 vs 10) explicitly. **`--strategy`** is reserved for labels (e.g. core vs swing).
 
 **Account risk %** in the output is dollar risk ÷ **account** (dollar risk = (entry − stop) × qty).
 
@@ -48,12 +68,18 @@ Override the slot count with **`--slots`** if you want 3 vs 4 (or 6 vs 10) expli
 Use the `bbs-eval` subcommand (the app also exposes `version` so Typer keeps subcommands explicit):
 
 ```bash
-python trade-assistant.py bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --account 10000 --max-loss 200
+python trade-assistant.py bbs-eval VLY --high 12.22 --low 11.45 --target 14.22
 ```
 
 Or if installed via `pip`:
 ```bash
-trade-assistant bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --account 10000 --max-loss 200
+trade-assistant bbs-eval VLY --high 12.22 --low 11.45 --target 14.22
+```
+
+For a one-time override, pass either or both sizing options, for example:
+
+```bash
+trade-assistant bbs-eval VLY --high 12.22 --low 11.45 --target 14.22 --max-loss 300
 ```
 
 Exit code **0** if the setup passes all BBS gates, **1** otherwise. Add `--earnings-soon` (manual), `--no-auto-earnings`, `--no-auto-profile`, `--weeks 3`, or `--slots 4` as needed.

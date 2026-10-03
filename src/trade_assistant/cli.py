@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from decimal import Decimal
+import tomllib
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+import re
 from typing import Literal
 
 import typer
@@ -28,6 +31,8 @@ from trade_assistant.sizing import optimal_quantity
 # positional). A second command keeps `bbs-eval` as a real subcommand.
 app = typer.Typer(help="Paper-trading assistant (BBS and more).")
 app.add_typer(journal_app, name="journal")
+config_app = typer.Typer(help="Manage user configuration.")
+app.add_typer(config_app, name="config")
 console = Console()
 
 
@@ -40,6 +45,143 @@ def version_cmd() -> None:
 def _parse_decimal(value: str) -> Decimal:
     """Parse CLI number; accepts 12.16 or 12,16."""
     return Decimal(value.strip().replace(",", "."))
+
+
+def _bbs_user_config_path() -> Path:
+    return Path.home() / ".trade-assistant" / "config.toml"
+
+
+def _load_bbs_user_defaults(required: tuple[str, ...]) -> dict[str, str]:
+    """Load optional BBS sizing defaults from the user's TOML config."""
+    path = _bbs_user_config_path()
+    try:
+        with path.open("rb") as config_file:
+            config = tomllib.load(config_file)
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise ValueError(f"Could not read user config at {path}: {exc}") from exc
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"Invalid TOML in user config at {path}: {exc}") from exc
+
+    bbs_config = config.get("bbs_eval", {})
+    if not isinstance(bbs_config, dict):
+        raise ValueError(f"The [bbs_eval] section in {path} must be a TOML table.")
+
+    defaults: dict[str, str] = {}
+    for key in required:
+        if key not in bbs_config:
+            continue
+        value = bbs_config[key]
+        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+            raise ValueError(f"bbs_eval.{key} in {path} must be a number or numeric string.")
+        defaults[key] = str(value)
+    return defaults
+
+
+def _save_bbs_user_defaults(account: str | None, max_loss: str | None) -> Path:
+    """Update BBS sizing defaults without replacing unrelated user config."""
+    path = _bbs_user_config_path()
+    values: dict[str, str] = {}
+    for key, value in (("account", account), ("max_loss", max_loss)):
+        if value is None:
+            continue
+        try:
+            parsed = _parse_decimal(value)
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"{key.replace('_', '-')} must be a valid number.") from exc
+        if not parsed.is_finite() or parsed <= 0:
+            raise ValueError(f"{key.replace('_', '-')} must be a positive finite number.")
+        values[key] = str(parsed)
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        content = ""
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"Could not read user config at {path}: {exc}") from exc
+
+    try:
+        config = tomllib.loads(content)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"Invalid TOML in user config at {path}: {exc}") from exc
+    bbs_config = config.get("bbs_eval", {})
+    if not isinstance(bbs_config, dict):
+        raise ValueError(f"The [bbs_eval] section in {path} must be a TOML table.")
+
+    lines = content.splitlines()
+    section_start: int | None = None
+    section_end = len(lines)
+    for index, line in enumerate(lines):
+        if re.match(r"^\s*\[bbs_eval\]\s*(?:#.*)?$", line):
+            section_start = index
+        elif re.match(r"^\s*\[", line):
+            if section_start is not None:
+                section_end = index
+                break
+            if re.match(r"^\s*\[bbs_eval\.", line):
+                raise ValueError(
+                    f"Cannot update an implicit [bbs_eval] table in {path}; "
+                    "use a standalone [bbs_eval] section."
+                )
+
+    if section_start is None:
+        if bbs_config:
+            raise ValueError(
+                f"Cannot update the existing bbs_eval table in {path}; "
+                "use a standalone [bbs_eval] section."
+            )
+        if content and not content.endswith("\n"):
+            lines.append("")
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(("[bbs_eval]", *(f'{key} = "{value}"' for key, value in values.items())))
+    else:
+        section = lines[section_start + 1 : section_end]
+        updated_keys: set[str] = set()
+        for index, line in enumerate(section):
+            match = re.match(r"^\s*(account|max_loss)\s*=", line)
+            if match and match.group(1) in values:
+                key = match.group(1)
+                section[index] = f'{key} = "{values[key]}"'
+                updated_keys.add(key)
+        for key, value in values.items():
+            if key not in updated_keys:
+                section.append(f'{key} = "{value}"')
+        lines[section_start + 1 : section_end] = section
+
+    output = "\n".join(lines).rstrip() + "\n"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(output, encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"Could not write user config at {path}: {exc}") from exc
+    return path
+
+
+@config_app.command("set")
+def config_set(
+    account: str | None = typer.Option(
+        None,
+        "--account",
+        help="Default total capital available for trading",
+    ),
+    max_loss: str | None = typer.Option(
+        None,
+        "--max-loss",
+        help="Default max loss per single operation",
+    ),
+) -> None:
+    """Set or update BBS sizing defaults in the user config."""
+    if account is None and max_loss is None:
+        console.print("[red]Error:[/red] Provide --account, --max-loss, or both.")
+        raise typer.Exit(2)
+    try:
+        path = _save_bbs_user_defaults(account, max_loss)
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(2) from exc
+    console.print(f"[green]BBS defaults saved[/green] to {path}")
 
 
 @app.command("bbs-eval")
@@ -60,27 +202,27 @@ def bbs_eval(
         "--target",
         help="Target level (price); G per share = target - high",
     ),
-    account: str = typer.Option(
-        ...,
+    account: str | None = typer.Option(
+        None,
         "--account",
-        help="Total capital available for trading (same currency as prices)",
+        help="Total capital available for trading (overrides user config)",
     ),
-    max_loss: str = typer.Option(
-        ...,
+    max_loss: str | None = typer.Option(
+        None,
         "--max-loss",
-        help="Max $ loss per single operation for this strategy (absolute)",
+        help="Max $ loss per single operation (overrides user config)",
     ),
     strategy: str = typer.Option(
         "core",
         "--strategy",
-        help="Strategy label (e.g. core, swing); used for future presets; sizing uses --max-loss",
+        help="Strategy label (e.g. core, swing); used for future presets",
     ),
     slots: int | None = typer.Option(
         None,
         "--slots",
         min=1,
         max=20,
-        help="Override concurrent-operation count (default: tiered from --account)",
+        help="Override concurrent-operation count (default: tiered from account)",
     ),
     earnings_soon: bool = typer.Option(
         False,
@@ -110,14 +252,45 @@ def bbs_eval(
     Entry and stop are derived from the last candle: entry = high + high*0.005,
     stop = low - low*0.005. G per share = target - high.
 
-    Share count is computed from --account, tiered concurrent operations, and --max-loss:
+    Share count is computed from the configured or supplied account, tiered
+    concurrent operations, and configured or supplied max loss:
     qty = min(floor(capital_per_op / entry), floor(max_loss / R_per_share)).
     """
-    high_d = _parse_decimal(high)
-    low_d = _parse_decimal(low)
-    target_d = _parse_decimal(target)
-    account_d = _parse_decimal(account)
-    max_loss_d = _parse_decimal(max_loss)
+    missing_values = tuple(
+        key
+        for key, value in (("account", account), ("max_loss", max_loss))
+        if value is None
+    )
+    try:
+        defaults = _load_bbs_user_defaults(missing_values) if missing_values else {}
+    except ValueError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(2) from exc
+
+    account = account if account is not None else defaults.get("account")
+    max_loss = max_loss if max_loss is not None else defaults.get("max_loss")
+    missing = [
+        option
+        for option, value in (("--account", account), ("--max-loss", max_loss))
+        if value is None
+    ]
+    if missing:
+        names = " and ".join(missing)
+        console.print(
+            f"[red]Error:[/red] {names} required. Supply the option(s) or set "
+            f"them in the bbs_eval table in {_bbs_user_config_path()}."
+        )
+        raise typer.Exit(2)
+
+    try:
+        high_d = _parse_decimal(high)
+        low_d = _parse_decimal(low)
+        target_d = _parse_decimal(target)
+        account_d = _parse_decimal(account)
+        max_loss_d = _parse_decimal(max_loss)
+    except (InvalidOperation, ValueError) as exc:
+        console.print("[red]Error:[/red] Prices, account, and max-loss must be valid numbers.")
+        raise typer.Exit(2) from exc
 
     if low_d > high_d:
         console.print("[red]Error:[/red] --low must be <= --high (last candle min <= max).")
